@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add cross-platform support for Linux (x86_64, aarch64, arm) using procfs process tracking and `process_madvise` (`MADV_PAGEOUT`) memory trimming.
+- Add cross-platform support for macOS (x86_64, Apple Silicon ARM64) with process monitoring and autostart LaunchAgent management.
+- Add support for Windows on ARM64 (`aarch64-pc-windows-msvc`).
+- Add unified Unix installation script (`scripts/install.sh`) for compiling and configuring Memory Sentry in one step.
+- Update GitHub Actions validation matrix to test across Linux, macOS, and Windows.
+
 - Clarify that the supported release requires Spotify Desktop and Spicetify CLI, distinguish the Spicetify Custom App from the native Rust companion, and add dynamic release/version/download/CI/license badges to the README.
 
 - Convert the README's privacy, security, installation, troubleshooting and migration references into working relative Markdown links; fix the development guide's same-directory documentation links.

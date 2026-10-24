@@ -4,7 +4,7 @@ version = "1.0.0-rc.1"
 edition = "2021"
 rust-version = "1.75"
 publish = false
-description = "Native adaptive Windows companion for Memory Sentry"
+description = "Native adaptive companion for Memory Sentry (Windows, Linux, macOS; x64 & ARM)"
 
 [lib]
 name = "memory_sentry_core"

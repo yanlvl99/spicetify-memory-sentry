@@ -4,9 +4,7 @@
 use crate::platform;
 use memory_sentry_core::{
     decide_adjustment, estimate_cpu_percent, AdjustmentDirection, ProcessRole,
-    ADJUSTMENT_COOLDOWN_MS, HIGH_CPU_DURATION_MS, HIGH_CPU_PERCENT,
-    LOW_CPU_DURATION_MS, LOW_CPU_PERCENT, LOW_WORKING_SET_MARGIN_MB,
-    INCREASE_STEP_MB, MAX_CAP_MB, MIN_CAP_MB, DECREASE_STEP_MB,
+    HIGH_CPU_PERCENT, LOW_CPU_PERCENT, MAX_CAP_MB, MIN_CAP_MB,
 };
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fs::{self, File, OpenOptions};
@@ -111,6 +109,7 @@ impl Default for Telemetry {
 }
 
 struct AppState {
+    #[allow(dead_code)]
     install_dir: PathBuf,
     settings_path: PathBuf,
     backup_path: PathBuf,
@@ -170,13 +169,26 @@ fn iso_from_unix_seconds(seconds: u64) -> String {
     format!("{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}Z")
 }
 
-fn appdata_root() -> Result<PathBuf, String> {
-    let local = std::env::var_os("LOCALAPPDATA").ok_or("LOCALAPPDATA is unavailable")?;
-    Ok(PathBuf::from(local))
-}
-
-fn install_dir() -> Result<PathBuf, String> {
-    Ok(appdata_root()?.join("SpicetifyMemorySentry"))
+pub fn install_dir() -> Result<PathBuf, String> {
+    #[cfg(windows)]
+    {
+        let local = std::env::var_os("LOCALAPPDATA").ok_or("LOCALAPPDATA is unavailable")?;
+        Ok(PathBuf::from(local).join(APP_NAME))
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let home = std::env::var_os("HOME").ok_or("HOME is unavailable")?;
+        Ok(PathBuf::from(home).join("Library").join("Application Support").join(APP_NAME))
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
+    {
+        if let Some(xdg) = std::env::var_os("XDG_DATA_HOME") {
+            Ok(PathBuf::from(xdg).join(APP_NAME))
+        } else {
+            let home = std::env::var_os("HOME").ok_or("HOME is unavailable")?;
+            Ok(PathBuf::from(home).join(".local").join("share").join(APP_NAME))
+        }
+    }
 }
 
 fn parse_json_string(text: &str, key: &str) -> Option<String> {
@@ -389,12 +401,18 @@ fn find_spicetify() -> Option<PathBuf> {
             if candidate.is_file() { return Some(candidate); }
         }
     }
+    if let Some(home) = std::env::var_os("HOME") {
+        let candidate = PathBuf::from(&home).join(".spicetify").join("spicetify");
+        if candidate.is_file() { return Some(candidate); }
+        let candidate2 = PathBuf::from(&home).join(".local").join("bin").join("spicetify");
+        if candidate2.is_file() { return Some(candidate2); }
+    }
     None
 }
 
 fn configure_spicetify(app_name: &str) -> Result<PathBuf, String> {
     let cli = find_spicetify().ok_or(
-        "Spicetify CLI was not found. Install Spicetify for the same Windows user that runs Spotify, then rerun Memory Sentry Setup."
+        "Spicetify CLI was not found. Install Spicetify for the same user that runs Spotify, then rerun Memory Sentry Setup."
     )?;
     let current = Command::new(&cli).args(["config", "custom_apps"]).output()
         .map_err(|e| format!("Could not read Spicetify configuration using {}: {e}", cli.display()))?;
@@ -434,7 +452,8 @@ fn stop_monitor_after_setup_failure(context: &str) -> String {
 pub fn configure_install(app_dir_arg: &str) -> Result<(), String> {
     let (os_name, build) = platform::detect_supported_client_os()?;
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-    let base = exe.parent().ok_or("Could not determine installation directory")?.to_path_buf();
+    let base = install_dir()?;
+    fs::create_dir_all(&base).map_err(|e| e.to_string())?;
     let settings_path = base.join("settings.json");
     let app_dir = PathBuf::from(app_dir_arg);
     let index_path = app_dir.join("index.js");
@@ -502,11 +521,14 @@ fn find_node() -> Option<PathBuf> {
         for folder in std::env::split_paths(&path) {
             let candidate = folder.join("node.exe");
             if candidate.is_file() { return Some(candidate); }
+            let candidate = folder.join("node");
+            if candidate.is_file() { return Some(candidate); }
         }
     }
     None
 }
 
+#[cfg(windows)]
 fn register_startup(exe: &Path) -> Result<(), String> {
     let value = format!("\"{}\" --launch", exe.display());
     let output = Command::new("reg.exe")
@@ -519,6 +541,7 @@ fn register_startup(exe: &Path) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(windows)]
 fn unregister_startup() -> Result<(), String> {
     let key = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run";
     let query = Command::new("reg.exe").args(["query", key, "/v", "Memory Sentry"])
@@ -531,6 +554,76 @@ fn unregister_startup() -> Result<(), String> {
     if !removed.success() {
         return Err("Could not remove Memory Sentry from current-user startup. Uninstall stopped to avoid a broken startup entry.".to_string());
     }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn register_startup(exe: &Path) -> Result<(), String> {
+    let home = std::env::var_os("HOME").ok_or("HOME is unavailable")?;
+    let autostart_dir = PathBuf::from(home).join(".config").join("autostart");
+    fs::create_dir_all(&autostart_dir).map_err(|e| e.to_string())?;
+    let desktop_file = autostart_dir.join("spicetify-memory-sentry.desktop");
+    let content = format!(
+        "[Desktop Entry]\nType=Application\nName=Memory Sentry\nExec=\"{}\" --launch\nHidden=false\nNoDisplay=false\nX-GNOME-Autostart-enabled=true\n",
+        exe.display()
+    );
+    fs::write(&desktop_file, content).map_err(|e| format!("Could not write autostart desktop entry: {e}"))?;
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn unregister_startup() -> Result<(), String> {
+    if let Some(home) = std::env::var_os("HOME") {
+        let desktop_file = PathBuf::from(home).join(".config").join("autostart").join("spicetify-memory-sentry.desktop");
+        let _ = fs::remove_file(desktop_file);
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn register_startup(exe: &Path) -> Result<(), String> {
+    let home = std::env::var_os("HOME").ok_or("HOME is unavailable")?;
+    let agents_dir = PathBuf::from(home).join("Library").join("LaunchAgents");
+    fs::create_dir_all(&agents_dir).map_err(|e| e.to_string())?;
+    let plist_file = agents_dir.join("com.spicetify.memory-sentry.plist");
+    let content = format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.spicetify.memory-sentry</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>{}</string>
+        <string>--launch</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+</dict>
+</plist>"#,
+        exe.display()
+    );
+    fs::write(&plist_file, content).map_err(|e| format!("Could not write LaunchAgent plist: {e}"))?;
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn unregister_startup() -> Result<(), String> {
+    if let Some(home) = std::env::var_os("HOME") {
+        let plist_file = PathBuf::from(home).join("Library").join("LaunchAgents").join("com.spicetify.memory-sentry.plist");
+        let _ = fs::remove_file(plist_file);
+    }
+    Ok(())
+}
+
+#[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
+fn register_startup(_exe: &Path) -> Result<(), String> {
+    Ok(())
+}
+
+#[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
+fn unregister_startup() -> Result<(), String> {
     Ok(())
 }
 
@@ -587,7 +680,14 @@ pub fn prepare_upgrade() -> Result<(), String> {
     }
 
     let pid_file = base.join("helper.pid");
+    #[cfg(windows)]
     let installed_exe = base.join("MemorySentry.exe");
+    #[cfg(not(windows))]
+    let installed_exe = if base.join("MemorySentry").exists() {
+        base.join("MemorySentry")
+    } else {
+        base.join("memory-sentry-native")
+    };
     for _ in 0..50 {
         let active_pid = fs::read_to_string(&pid_file).ok().and_then(|s| s.trim().parse::<u32>().ok());
         if active_pid.map(|pid| platform::process_matches_executable(pid, &installed_exe)).unwrap_or(false) {
@@ -663,7 +763,7 @@ pub fn check_supported_os() -> Result<(), String> {
 
 pub fn check_spicetify_cli() -> Result<(), String> {
     let cli = find_spicetify().ok_or(
-        "Spicetify CLI was not found. Install Spicetify for the same Windows user that runs Spotify, then rerun Memory Sentry Setup."
+        "Spicetify CLI was not found. Install Spicetify for the same user that runs Spotify, then rerun Memory Sentry Setup."
     )?;
     println!("Spicetify CLI found at {}.", cli.display());
     Ok(())
@@ -676,6 +776,7 @@ pub fn check_install_prerequisites() -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(windows)]
 fn cleanup_legacy_startup() {
     if let Some(appdata) = std::env::var_os("APPDATA") {
         let startup = PathBuf::from(appdata).join("Microsoft").join("Windows").join("Start Menu").join("Programs").join("Startup");
@@ -684,6 +785,10 @@ fn cleanup_legacy_startup() {
     }
 }
 
+#[cfg(not(windows))]
+fn cleanup_legacy_startup() {}
+
+#[cfg(windows)]
 fn stop_legacy_node_helper(base: &Path) -> Result<(), String> {
     let helper = base.join("helper.js");
     if !helper.exists() { return Ok(()); }
@@ -702,6 +807,11 @@ fn stop_legacy_node_helper(base: &Path) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(not(windows))]
+fn stop_legacy_node_helper(_base: &Path) -> Result<(), String> {
+    Ok(())
+}
+
 fn cleanup_legacy_node_files(base: &Path) -> Result<(), String> {
     stop_legacy_node_helper(base)?;
     let _ = fs::remove_file(base.join("helper.js"));
@@ -712,20 +822,22 @@ fn cleanup_legacy_node_files(base: &Path) -> Result<(), String> {
 }
 
 fn preserve_logs(base: &Path) {
-    let Some(local) = std::env::var_os("LOCALAPPDATA") else { return; };
+    let target_dir = match install_dir() {
+        Ok(dir) => dir.join("logs"),
+        Err(_) => return,
+    };
     let source = base.join("logs");
     if !source.is_dir() { return; }
-    let dest = PathBuf::from(local).join("MemorySentry").join("logs");
-    if fs::create_dir_all(&dest).is_err() { return; }
+    if fs::create_dir_all(&target_dir).is_err() { return; }
     let Ok(entries) = fs::read_dir(&source) else { return; };
     for entry in entries.flatten() {
         let path = entry.path();
         if !path.is_file() { continue; }
         let Some(name) = path.file_name() else { continue; };
-        let mut target = dest.join(name);
+        let mut target = target_dir.join(name);
         if target.exists() {
             let renamed = format!("{}-{}.log", path.file_stem().and_then(|n| n.to_str()).unwrap_or("helper"), now_ms());
-            target = dest.join(renamed);
+            target = target_dir.join(renamed);
         }
         let _ = fs::copy(path, target);
     }
@@ -812,14 +924,14 @@ pub fn run_monitor() -> Result<(), String> {
     }
     let (tx, rx) = mpsc::channel::<Result<platform::Snapshot, String>>();
     thread::spawn(move || loop {
-        let result = platform::powershell_snapshot();
+        let result = platform::process_snapshot();
         if tx.send(result).is_err() { break; }
         thread::sleep(Duration::from_millis(SNAPSHOT_INTERVAL_MS));
     });
 
     {
         let mut s = shared.lock().map_err(|_| "State lock poisoned")?;
-        log_event(&mut s, format!("Memory Sentry {VERSION} started. Supported OS: Windows 10/11. Adaptive cap={MIN_CAP_MB}-{MAX_CAP_MB} MB. No external telemetry."), "info");
+        log_event(&mut s, format!("Memory Sentry {VERSION} started. Supported OS: Windows, Linux, macOS (x64 and ARM). Adaptive cap={MIN_CAP_MB}-{MAX_CAP_MB} MB. No external telemetry."), "info");
     }
 
     loop {
@@ -1610,7 +1722,7 @@ fn start_background_copy() -> Result<(), String> {
     use std::os::windows::process::CommandExt;
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-    let base = exe.parent().ok_or("Could not determine installation directory")?;
+    let base = install_dir()?;
     let log_dir = base.join("logs");
     fs::create_dir_all(&log_dir).map_err(|e| format!("Could not create startup log directory: {e}"))?;
     let stdout_log = OpenOptions::new().create(true).append(true).open(log_dir.join("startup.log"))
@@ -1618,6 +1730,27 @@ fn start_background_copy() -> Result<(), String> {
     let stderr_log = stdout_log.try_clone().map_err(|e| format!("Could not duplicate startup log handle: {e}"))?;
     Command::new(exe).arg("--monitor").creation_flags(CREATE_NO_WINDOW)
         .stdin(Stdio::null()).stdout(Stdio::from(stdout_log)).stderr(Stdio::from(stderr_log)).spawn()
+        .map(|_| ())
+        .map_err(|e| format!("Could not start the companion: {e}"))
+}
+
+#[cfg(not(windows))]
+fn start_background_copy() -> Result<(), String> {
+    use std::os::unix::process::CommandExt;
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let base = install_dir()?;
+    let log_dir = base.join("logs");
+    fs::create_dir_all(&log_dir).map_err(|e| format!("Could not create startup log directory: {e}"))?;
+    let stdout_log = OpenOptions::new().create(true).append(true).open(log_dir.join("startup.log"))
+        .map_err(|e| format!("Could not open startup log: {e}"))?;
+    let stderr_log = stdout_log.try_clone().map_err(|e| format!("Could not duplicate startup log handle: {e}"))?;
+    let mut cmd = Command::new(exe);
+    cmd.arg("--monitor")
+        .stdin(Stdio::null())
+        .stdout(Stdio::from(stdout_log))
+        .stderr(Stdio::from(stderr_log))
+        .process_group(0);
+    cmd.spawn()
         .map(|_| ())
         .map_err(|e| format!("Could not start the companion: {e}"))
 }

@@ -1,8 +1,8 @@
 # Memory Sentry for Spotify Desktop
 
-[![Release](https://img.shields.io/github/v/release/yanlvl99/spicetify-memory-sentry?include_prereleases&sort=semver&label=release)](https://github.com/yanlvl99/spicetify-memory-sentry/releases) [![Version](https://img.shields.io/github/v/tag/yanlvl99/spicetify-memory-sentry?include_prereleases&sort=semver&label=version)](https://github.com/yanlvl99/spicetify-memory-sentry/tags) [![Downloads](https://img.shields.io/github/downloads/yanlvl99/spicetify-memory-sentry/total?label=all%20release%20downloads)](https://github.com/yanlvl99/spicetify-memory-sentry/releases) [![Validation](https://github.com/yanlvl99/spicetify-memory-sentry/actions/workflows/validate.yml/badge.svg?branch=main)](https://github.com/yanlvl99/spicetify-memory-sentry/actions/workflows/validate.yml) [![License](https://img.shields.io/github/license/yanlvl99/spicetify-memory-sentry?label=license)](LICENSE) ![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011%20x64-blue) ![Status](https://img.shields.io/badge/status-experimental-orange) [![Requires Spicetify](https://img.shields.io/badge/requires-Spicetify-1DB954)](docs/INSTALLATION.md)
+[![Release](https://img.shields.io/github/v/release/yanlvl99/spicetify-memory-sentry?include_prereleases&sort=semver&label=release)](https://github.com/yanlvl99/spicetify-memory-sentry/releases) [![Version](https://img.shields.io/github/v/tag/yanlvl99/spicetify-memory-sentry?include_prereleases&sort=semver&label=version)](https://github.com/yanlvl99/spicetify-memory-sentry/tags) [![Downloads](https://img.shields.io/github/downloads/yanlvl99/spicetify-memory-sentry/total?label=all%20release%20downloads)](https://github.com/yanlvl99/spicetify-memory-sentry/releases) [![Validation](https://github.com/yanlvl99/spicetify-memory-sentry/actions/workflows/validate.yml/badge.svg?branch=main)](https://github.com/yanlvl99/spicetify-memory-sentry/actions/workflows/validate.yml) [![License](https://img.shields.io/github/license/yanlvl99/spicetify-memory-sentry?label=license)](LICENSE) ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-blue) ![Architecture](https://img.shields.io/badge/arch-x64%20%7C%20ARM64-lightgrey) ![Status](https://img.shields.io/badge/status-experimental-orange) [![Requires Spicetify](https://img.shields.io/badge/requires-Spicetify-1DB954)](docs/INSTALLATION.md)
 
-**Windows 10 and Windows 11 desktop editions only. Requires Spotify Desktop and Spicetify CLI.** Memory Sentry is an experimental open-source companion. When Spotify is minimized or hidden, its native Windows companion adaptively changes eligible child-process working-set ceilings, protects audio-service processes, and attempts to restore original limits when Spotify becomes visible.
+**Windows 10/11, Linux, and macOS (x64 and ARM). Requires Spotify Desktop and Spicetify CLI.** Memory Sentry is an experimental open-source companion. When Spotify is minimized or hidden, its native companion adaptively changes eligible child-process working-set ceilings, protects audio-service processes, and attempts to restore original limits when Spotify becomes visible.
 
 ## Spicetify is required by the current release
 
@@ -44,6 +44,15 @@ When Spotify is restored, the intended behavior is to return to the previous int
 5. Setup installs the native companion, writes local settings/token, starts and health-checks the local API, then applies the Custom App through Spicetify. Spicetify may restart Spotify automatically.
 6. When Spotify returns, select Memory Sentry in the sidebar. The helper is also registered to start at login for the current Windows user.
 
+### Installation on Linux and macOS (x64 and ARM64)
+
+Clone the repository and run the automated installer:
+```bash
+git clone https://github.com/yanlvl99/spicetify-memory-sentry.git
+cd spicetify-memory-sentry
+./scripts/install.sh
+```
+
 The Marketplace entry is for **discovery only** and points to the same official GitHub release. There is no separate Marketplace installer, Marketplace-specific build, or custom portable ZIP. GitHub's automatically generated source archive is for inspecting the source and is not an installation package.
 
 The Inno Setup installer is per-user and does not require a machine-wide MSI installation. The executable is not code-signed, so Windows SmartScreen or antivirus may still show a reputation warning. Do not bypass security warnings blindly.
@@ -62,12 +71,10 @@ CPU is estimated from process-time deltas and expressed as a percentage of one l
 
 ## Requirements
 
-- Windows 10 or Windows 11 desktop edition, x64.
-- Spotify Desktop and Spicetify CLI installed for the same Windows user.
+- Windows 10/11 (x64, ARM64), Linux (x86_64, aarch64, arm), or macOS 11+ (Intel, Apple Silicon).
+- Spotify Desktop and Spicetify CLI installed for the same user.
 - The official setup program contains the Rust native companion. A global Node.js installation is not required for new installations.
 - When migrating a legacy Node.js installation with an outstanding recovery file, setup may request Node.js 22+ temporarily to run the old helper's restore command. If legacy recovery cannot be verified, setup stops and preserves the backup instead of deleting it.
-
-macOS, Linux, Windows 7/8/8.1, Windows Server and ARM64 Windows are not supported by this release.
 
 ## Installed components and safety
 

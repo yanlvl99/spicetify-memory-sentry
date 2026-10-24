@@ -11,6 +11,8 @@
 /dist/
 /build/
 /release/
+target/
+**/target/
 
 # Local runtime data
 node_modules/

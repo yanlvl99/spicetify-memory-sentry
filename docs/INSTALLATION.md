@@ -1,10 +1,10 @@
 # Installation guide
 
-**Supported systems: Windows 10 and Windows 11 desktop editions, x64.**
+**Supported systems: Windows 10/11 (x64, ARM64), Linux (x86_64, aarch64, arm), and macOS 11+ (Intel, Apple Silicon).**
 
-**Spicetify is required by the current release.** Spotify Desktop and Spicetify CLI must be installed for the same Windows user. The dashboard is a Spicetify Custom App, while the native Rust companion performs process-memory management. This is not a standalone application; a separate no-Spicetify interface could be developed later, but it is not included or supported by the current release.
+**Spicetify is required by the current release.** Spotify Desktop and Spicetify CLI must be installed for the same user. The dashboard is a Spicetify Custom App, while the native Rust companion performs process-memory management.
 
-## The only supported installation method
+## The only supported installation method on Windows
 
 1. Open the official release page: https://github.com/yanlvl99/spicetify-memory-sentry/releases
 2. Download **Memory Sentry Setup** and the `.sha256` checksum attached to that same release.
@@ -14,7 +14,20 @@
 6. Setup installs the native companion, writes its local settings/token, starts and health-checks the local API, then applies the Custom App through `spicetify apply`. Spicetify may restart Spotify automatically.
 7. When Spotify returns, select Memory Sentry in the sidebar. The helper is also registered to start at login for the current user.
 
-The **Marketplace entry is for discovery only** and points to this same official release page. It is not a second installation method: Marketplace cannot install the native Windows companion, and there is no separate Marketplace build or custom portable ZIP. GitHub-generated source archives are for code review, not installation.
+## Installation on Linux and macOS (x64 & ARM)
+
+For Linux and macOS, install from source using the helper script:
+
+1. Ensure `git`, `cargo` (Rust) and `spicetify` are installed.
+2. Clone and run the automated installer:
+   ```bash
+   git clone https://github.com/yanlvl99/spicetify-memory-sentry.git
+   cd spicetify-memory-sentry
+   ./scripts/install.sh
+   ```
+3. The script compiles the companion, configures Spicetify, starts the daemon and configures autostart.
+
+The **Marketplace entry is for discovery only** and points to this same official release page. It is not a second installation method: Marketplace cannot install the native companion, and there is no separate Marketplace build or custom portable ZIP. GitHub-generated source archives are for code review, not installation.
 
 ## Upgrade from the Node.js preview
 
@@ -22,12 +35,13 @@ The official Setup EXE is also the supported upgrade route. Before replacing a p
 
 ## Uninstall
 
-Use Windows Settings → Apps → Installed apps → Memory Sentry → Uninstall. The native pre-uninstall command restores recorded working-set limits, removes the current-user startup entry and deregisters the Custom App before the files are removed. Spotify does not need to be closed manually; `spicetify apply` may refresh/restart it. If recovery fails, uninstall stops and preserves program/recovery data.
+- **Windows:** Use Windows Settings → Apps → Installed apps → Memory Sentry → Uninstall. The native pre-uninstall command restores recorded working-set limits, removes the current-user startup entry and deregisters the Custom App before the files are removed. Spotify does not need to be closed manually; `spicetify apply` may refresh/restart it.
+- **Linux/macOS:** Run `MemorySentry --pre-uninstall` to restore any limits, remove autostart entries and deregister the Custom App.
 
-Logs are preserved at `%LOCALAPPDATA%\MemorySentry\logs` after uninstall.
+Logs are preserved in the user logs directory after uninstall.
 
 ## Security and unsupported systems
 
-The installer is per-user and should not request administrator privileges. It does not disable antivirus, SmartScreen, the firewall or Windows security controls. Unsigned setup files may still show reputation warnings; verify the download source and SHA-256 instead of blindly bypassing warnings.
+The installer is per-user and should not request administrator privileges. It does not disable antivirus, SmartScreen, the firewall or system security controls. Unsigned setup files may still show reputation warnings; verify the download source and SHA-256 instead of blindly bypassing warnings.
 
-Unsupported: Windows Server, Windows 7/8/8.1, macOS, Linux and ARM64 Windows.
+Unsupported: Windows Server, Windows 7/8/8.1, 32-bit legacy Windows.
